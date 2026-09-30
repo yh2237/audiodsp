@@ -33,6 +33,7 @@ jobs:
       - run: go test -race ./...
       - run: go test ./pitch -run '^$' -fuzz FuzzDetector -fuzztime 10s
       - run: go test ./stretch -run '^$' -fuzz FuzzStretch -fuzztime 10s
+      - run: go test ./spectrum -run '^$' -fuzz FuzzLog -fuzztime 10s
   wasm:
     runs-on: ubuntu-latest
     steps:

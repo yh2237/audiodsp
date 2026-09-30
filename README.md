@@ -1,9 +1,9 @@
 # audiodsp
 
-float64モノラル波形のピッチ推定と時間伸縮を提供するGoライブラリです。`pitch`と`stretch`を実装しています。標準ライブラリだけを使用し、Go 1.21以上に対応します。
+float64モノラル波形のピッチ推定・時間伸縮・対数間隔の振幅計算を提供するGoライブラリです。`pitch`、`stretch`、`spectrum`を実装しています。標準ライブラリだけを使用し、Go 1.21以上に対応します。
 
 ```sh
-go get github.com/yh2237/audiodsp@v0.2.0
+go get github.com/yh2237/audiodsp@v0.3.0
 ```
 
 ## 使用例
@@ -58,6 +58,19 @@ linear := stretch.Linear(source, targetFrames)
 
 生成波形の実行例は`go run ./examples/stretch`です。
 
+## スペクトルの振幅
+
+`github.com/yh2237/audiodsp/spectrum`の`Log(values, sampleRate, bands, minimumHz, maximumHz)`は、両端を含む対数間隔の周波数点でHann窓付きの直接DFT振幅を求めます。
+
+- 各点の振幅は入力長で割り、`20*log10(max(amplitude, 1e-7))`で返します。無音の下限は-140dBです。
+- FFTや周波数帯域のエネルギー平均ではありません。指定した点の振幅を計算します。
+- Hann窓の適用は入力ごとに一度だけ行い、周波数点間で再利用します。
+- 入力2サンプル以上、正のレート、2点以上、有限で正かつ増加する周波数範囲を要求します。範囲比や位相計算が無限大になる設定も含め、条件に合わない設定はnilです。
+- 入力波形は有限値を前提とします。入力を変更せず、出力は独立した配列です。振幅の正規化や平均値除去は行いません。
+- 4096サンプルまでの窓付き波形はローカル作業領域を使い、それを超える入力では一時配列を確保します。出力配列は呼び出しごとに確保します。
+
+使用例は`go run ./examples/spectrum`です。
+
 ## 検証
 
 ```sh
@@ -66,6 +79,7 @@ go vet ./...
 go test ./pitch -run '^$' -bench . -benchmem
 go test ./pitch -run '^$' -fuzz FuzzDetector -fuzztime 10s
 go test ./stretch -run '^$' -fuzz FuzzStretch -fuzztime 10s
+go test ./spectrum -run '^$' -fuzz FuzzLog -fuzztime 10s
 ```
 
 CIにWindows/Linux/macOS、Go 1.21/stable、race・fuzz、Go wasmビルドの検査を設定しています。
