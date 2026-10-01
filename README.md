@@ -1,9 +1,9 @@
 # audiodsp
 
-float64モノラル波形のピッチ推定・時間伸縮・対数間隔の振幅計算を提供するGoライブラリです。`pitch`、`stretch`、`spectrum`を実装しています。標準ライブラリだけを使用し、Go 1.21以上に対応します。
+float64モノラル波形のピッチ推定・時間伸縮・対数間隔の振幅計算と、16-bit PCM WAVの読み書きを提供するGoライブラリです。`pitch`、`stretch`、`spectrum`、`wav`を実装しています。標準ライブラリだけを使用し、Go 1.21以上に対応します。
 
 ```sh
-go get github.com/yh2237/audiodsp@v0.3.0
+go get github.com/yh2237/audiodsp@v0.4.0
 ```
 
 ## 使用例
@@ -71,6 +71,26 @@ linear := stretch.Linear(source, targetFrames)
 
 使用例は`go run ./examples/spectrum`です。
 
+## WAVの読み書き
+
+`github.com/yh2237/audiodsp/wav`は、RIFF/WAVEの整数PCM（format 1）・16-bitを扱います。
+
+```go
+pcm, err := wav.Decode(reader)        // *wav.PCM{SampleRate, Channels, Data []int16}
+err = wav.Encode(writer, pcm)          // 44byteのヘッダーとサンプルを書き込む
+data, err := wav.Bytes(pcm)            // ファイル全体を1つの配列で返す
+```
+
+- `Data`はチャンネルが交互に並ぶ16-bitサンプルです。`len(Data)`はチャンネル数の倍数です。
+- 8/24/32-bit、浮動小数点、WAVE_FORMAT_EXTENSIBLE、RF64は扱いません。対応しない形式はエラーです。
+- `fmt `より前の`data`、未知のチャンクは読み飛ばします。`fmt `の後に`data`が複数ある場合は最後のものを返します。奇数長チャンクの埋め草1byteを要求し、途中で終わる入力やチャンネル数に揃わないサンプル数はエラーです。
+- サンプルは読込バッファから直接復号し、data全体の一時バイト列を作りません。data長の宣言が16Mサンプルを超える場合、最初に確保する容量は16Mサンプルまでとし、読込に合わせて増やします。
+- 書き出しは正のサンプルレートとチャンネル数、RIFFの32-bitサイズに収まるデータを要求します。`Encode`は固定長のバッファで変換して書き込み、出力全体を先にメモリへ作りません。空のサンプル列も書き出せます。
+- 入力の配列を変更しません。`Decode`の結果と`Bytes`の戻り値は呼び出しごとに独立した配列です。
+- ファイルの作成・置換、リサンプリング、チャンネル変換は実装していません。
+
+使用例は`go run ./examples/wav`です。
+
 ## 検証
 
 ```sh
@@ -80,6 +100,7 @@ go test ./pitch -run '^$' -bench . -benchmem
 go test ./pitch -run '^$' -fuzz FuzzDetector -fuzztime 10s
 go test ./stretch -run '^$' -fuzz FuzzStretch -fuzztime 10s
 go test ./spectrum -run '^$' -fuzz FuzzLog -fuzztime 10s
+go test ./wav -run '^$' -fuzz FuzzDecode -fuzztime 10s
 ```
 
 CIにWindows/Linux/macOS、Go 1.21/stable、race・fuzz、Go wasmビルドの検査を設定しています。
