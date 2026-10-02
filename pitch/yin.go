@@ -107,7 +107,11 @@ func (d *Detector) Estimate(frame []float64, sampleRate int) float64 {
 			break
 		}
 	}
-	if bestLag == 0 || bestValue > 0.35 {
+	if bestLag == 0 {
+		return 0
+	}
+	bestLag, bestValue = fundamentalLag(difference, bestLag, bestValue, minLag)
+	if bestValue > 0.35 {
 		return 0
 	}
 	refined := float64(bestLag)
@@ -119,6 +123,27 @@ func (d *Detector) Estimate(frame []float64, sampleRate int) float64 {
 		}
 	}
 	return float64(sampleRate) / refined
+}
+
+// fundamentalLagは、周期の整数倍（分周）を選んだ場合に、近い深さの谷がある1/2〜1/4の遅れを基本周期として選び直す。
+// 声門の揺れなどで数周期ごとの繰り返しのほうが似ている声では、1周期の谷がわずかに浅くなる。
+// 深さの許容は選んだ谷に比例させ、深い谷（ほぼ完全な周期）では倍音を基本周期と取り違えないようにする。
+func fundamentalLag(difference []float64, lag int, value float64, minLag int) (int, float64) {
+	for divisor := 4; divisor >= 2; divisor-- {
+		center := float64(lag) / float64(divisor)
+		low := max(minLag, int(math.Floor(center*0.96)))
+		high := min(len(difference)-2, int(math.Ceil(center*1.04)))
+		candidate, candidateValue := 0, math.Inf(1)
+		for index := max(low, 1); index <= high; index++ {
+			if difference[index] < candidateValue && difference[index] <= difference[index-1] && difference[index] <= difference[index+1] {
+				candidate, candidateValue = index, difference[index]
+			}
+		}
+		if candidate > 0 && candidateValue <= value*1.5+0.1 {
+			return candidate, candidateValue
+		}
+	}
+	return lag, value
 }
 
 func rms(values []float64) float64 {

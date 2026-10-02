@@ -21,6 +21,33 @@ func TestEstimateMedianSine(t *testing.T) {
 	}
 }
 
+func dipsAt(length int, dips map[int]float64) []float64 {
+	difference := make([]float64, length)
+	for i := range difference {
+		difference[i] = 1
+	}
+	for lag, value := range dips {
+		difference[lag] = value
+	}
+	return difference
+}
+
+func TestFundamentalLagPrefersSingleCycle(t *testing.T) {
+	// 3周期の繰り返しの谷（0.10）が1周期の谷（0.21）より深い声。
+	difference := dipsAt(800, map[int]float64{213: .21, 426: .19, 639: .10})
+	if lag, _ := fundamentalLag(difference, 639, .10, 88); lag != 213 {
+		t.Fatalf("lag=%d", lag)
+	}
+}
+
+func TestFundamentalLagKeepsDeepPeriod(t *testing.T) {
+	// 第2倍音が強いだけの周期的な波形では、半分の遅れの谷（0.18）を基本周期にしない。
+	difference := dipsAt(800, map[int]float64{200: .18, 400: .001})
+	if lag, _ := fundamentalLag(difference, 400, .001, 88); lag != 400 {
+		t.Fatalf("lag=%d", lag)
+	}
+}
+
 func TestDetectorReuseAndInputOwnership(t *testing.T) {
 	var detector Detector
 	for _, rate := range []int{48000, 8000, 16000, 8000} {
