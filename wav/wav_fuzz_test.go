@@ -11,6 +11,7 @@ func FuzzDecode(f *testing.F) {
 	f.Add(data)
 	f.Add(riff(chunk("fmt ", fmtBody(1, 1, 8000, 16, 3), true), chunk("JUNK", []byte{1}, true), chunk("data", samplesBody(7), true)))
 	f.Add([]byte("RIFF"))
+	f.Add(riff(chunk("fmt ", fmtBody(1, 1, 44100, 16, 0), true), chunk("data", append(samplesBody(-1, 2), 0), false)))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		got, err := Decode(bytes.NewReader(data))
 		if err != nil {

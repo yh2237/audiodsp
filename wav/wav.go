@@ -24,9 +24,10 @@ const headerSize = 44
 const maxInitialSamples = 16 << 20
 
 // Decode reads a RIFF/WAVE stream with a PCM (format 1) fmt chunk and 16-bit samples.
-// Unknown chunks are skipped, odd-sized chunks must carry their pad byte, and a data
-// chunk that appears before fmt is ignored. When several data chunks follow fmt, the
-// last one is returned.
+// Unknown chunks are skipped, and a data chunk that appears before fmt is ignored.
+// When several data chunks follow fmt, the last one is returned. A trailing byte
+// that cannot form a 16-bit sample is discarded. Odd-sized chunks require padding,
+// except that a final data chunk may end at EOF without its pad byte.
 func Decode(input io.Reader) (*PCM, error) {
 	reader := bufio.NewReader(input)
 	var header [12]byte
@@ -78,12 +79,14 @@ func Decode(input io.Reader) (*PCM, error) {
 			if bitsPerSample != 16 {
 				return nil, errors.New("wav: only 16-bit PCM is supported")
 			}
-			if size%2 != 0 {
-				return nil, errors.New("wav: invalid 16-bit PCM data size")
-			}
 			var err error
 			if samples, err = readSamples(reader, int(size/2)); err != nil {
 				return nil, err
+			}
+			if size%2 == 1 {
+				if _, err := reader.ReadByte(); err != nil {
+					return nil, eof(err)
+				}
 			}
 			dataFound = true
 		default:
@@ -93,6 +96,9 @@ func Decode(input io.Reader) (*PCM, error) {
 		}
 		if size%2 == 1 {
 			if _, err := reader.ReadByte(); err != nil {
+				if err == io.EOF && id == "data" && fmtFound {
+					break
+				}
 				return nil, eof(err)
 			}
 		}

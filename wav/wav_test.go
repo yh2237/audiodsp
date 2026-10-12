@@ -153,6 +153,37 @@ func TestDecodeRejectsUnsupportedOrBrokenInput(t *testing.T) {
 	}
 }
 
+func TestDecodeDiscardsIncompleteSampleWithoutChangingPCM(t *testing.T) {
+	for _, channels := range []uint16{1, 2} {
+		format := chunk("fmt ", fmtBody(1, channels, 44100, 16, 0), true)
+		want := []int16{-32768, -1, 0, 32767}
+		body := append(samplesBody(want...), 0x7f)
+		for _, pad := range []bool{false, true} {
+			data := riff(format, chunk("data", body, pad))
+			for _, reader := range []io.Reader{bytes.NewReader(data), fragmentReader{bytes.NewReader(data)}} {
+				got, err := Decode(reader)
+				if err != nil || got.SampleRate != 44100 || got.Channels != int(channels) || !slices.Equal(got.Data, want) {
+					t.Fatalf("channels=%d pad=%v: got %v, %v", channels, pad, got, err)
+				}
+			}
+		}
+		t.Run("following chunk", func(t *testing.T) {
+			data := riff(format, chunk("data", body, true), chunk("LIST", []byte{1, 2}, true))
+			got, err := Decode(bytes.NewReader(data))
+			if err != nil || !slices.Equal(got.Data, want) {
+				t.Fatalf("got %v, %v", got, err)
+			}
+		})
+		t.Run("declared trailing byte is missing", func(t *testing.T) {
+			data := riff(format, chunk("data", body, false))
+			_, err := Decode(bytes.NewReader(data[:len(data)-1]))
+			if !errors.Is(err, io.ErrUnexpectedEOF) {
+				t.Fatalf("got %v", err)
+			}
+		})
+	}
+}
+
 func TestDecodeDoesNotTrustHugeDataSize(t *testing.T) {
 	data := riff(chunk("fmt ", fmtBody(1, 1, 16000, 16, 0), true))
 	data = append(data, []byte("data\xfe\xff\xff\xff")...)
