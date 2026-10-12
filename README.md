@@ -1,9 +1,9 @@
 # audiodsp
 
-モノラル波形のピッチ推定・時間伸縮・対数間隔の振幅計算と、16-bit PCM WAVの読み書きを行うGoライブラリです。波形処理にはfloat64の配列を使います。`pitch`、`stretch`、`spectrum`、`wav`の4パッケージを提供し、標準ライブラリだけに依存しています。Go 1.21以上で利用できます。
+モノラル波形のピッチ推定・時間伸縮・対数間隔の振幅計算・正規化相関と、16-bit PCM WAVの読み書きを行うGoライブラリです。波形処理にはfloat64の配列を使います。`pitch`、`stretch`、`spectrum`、`correlation`、`wav`の5パッケージを提供し、標準ライブラリだけに依存しています。Go 1.21以上で利用できます。
 
 ```sh
-go get github.com/yh2237/audiodsp@v0.4.1
+go get github.com/yh2237/audiodsp@v0.5.0
 ```
 
 ## 使用例
@@ -91,6 +91,25 @@ data, err := wav.Bytes(pcm)            // ファイル全体を1つの配列で�
 
 使用例は`go run ./examples/wav`です。
 
+## 波形の正規化相関
+
+`correlation`パッケージは`v0.5.0`から利用できます。
+
+```go
+signed := correlation.Normalized(left, right, minimumEnergy)
+positive := correlation.Max(left, right, maxLag, minOverlap, minimumEnergy)
+```
+
+- 平均を除去した波形の積和を、両波形のエネルギーの積の平方根で割ります。ここでのエネルギーは二乗和で、RMSではありません。
+- `Normalized`は同じ長さの波形を比較し、負の相関も返します。2サンプル未満と長さの不一致では0を返します。
+- `Max`は`-maxLag`から`maxLag`まで位置をずらし、最大の正の相関係数を返します。重なりが`minOverlap`サンプル未満の位置は使いません。正の相関がない場合、`maxLag`が負の場合、`minOverlap`が2未満の場合、入力が`minOverlap`より短い場合は0を返します。
+- 正のlagではrightの先頭を、負のlagではleftの先頭を読み飛ばします。各位置の重なり部分で平均とエネルギーを計算します。
+- `minimumEnergy`には有限の0以上の値を指定します。不正な値、またはいずれかの波形のエネルギーがこの値以下の場合は0を返します。比較窓の長さと閾値は呼出し側で決めます。
+- 入力は有限値で、二乗和とエネルギーの積をfloat64で表現できる範囲の波形を前提とします。丸め誤差を含む相関係数をそのまま返し、`Normalized`を-1〜1へ切り詰める処理は行いません。
+- 入力配列を変更せず、参照や作業配列も保持しません。FFT、遅れ位置の返却、窓の選択、音源の評価は行いません。
+
+生成した波形を比較する例は`go run ./examples/correlation`で実行できます。
+
 ## 検証
 
 ```sh
@@ -101,6 +120,7 @@ go test ./pitch -run '^$' -fuzz FuzzDetector -fuzztime 10s
 go test ./stretch -run '^$' -fuzz FuzzStretch -fuzztime 10s
 go test ./spectrum -run '^$' -fuzz FuzzLog -fuzztime 10s
 go test ./wav -run '^$' -fuzz FuzzDecode -fuzztime 10s
+go test ./correlation -run '^$' -fuzz FuzzCorrelation -fuzztime 10s
 ```
 
 CIにはWindows・Linux・macOS、Go 1.21とstable、race・fuzz、Go wasmビルドの検査を設定しています。
